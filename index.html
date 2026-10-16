@@ -104,38 +104,18 @@
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Spritesheet for player character
-    const spriteImg = new Image();
-    spriteImg.src = 'spritesheet.png';
-    const SPRITE_W = 76;
-    const SPRITE_H = 140;
-    const ROW_H = 170;
-    const LABEL_H = 30;
-    // Animation definitions: [row, numFrames, frameRate]
-    const ANIMS = {
-        idle_right:  { row: 0, frames: 4,  fps: 3 },
-        walk_right:  { row: 0, frames: 8,  fps: 8, colOffset: 4 },
-        run_right:   { row: 0, frames: 8,  fps: 12, colOffset: 12 },
-        idle_left:   { row: 1, frames: 4,  fps: 3 },
-        walk_left:   { row: 1, frames: 8,  fps: 8, colOffset: 4 },
-        run_left:    { row: 1, frames: 8,  fps: 12, colOffset: 12 },
-        idle_up:     { row: 2, frames: 4,  fps: 3 },
-        walk_up:     { row: 2, frames: 8,  fps: 8, colOffset: 4 },
-        run_up:      { row: 2, frames: 8,  fps: 12, colOffset: 12 },
-        idle_down:   { row: 3, frames: 4,  fps: 3 },
-        walk_down:   { row: 3, frames: 8,  fps: 8, colOffset: 4 },
-        run_down:    { row: 3, frames: 8,  fps: 12, colOffset: 12 },
-        jump:        { row: 4, frames: 4,  fps: 6 },
-        attack:      { row: 4, frames: 8,  fps: 10, colOffset: 4 },
-        special:     { row: 4, frames: 4,  fps: 8, colOffset: 12 },
-        hurt:        { row: 5, frames: 4,  fps: 6 },
-        death:       { row: 5, frames: 4,  fps: 4, colOffset: 4 },
-    };
-    let currentAnim = 'idle_down';
-    let animFrame = 0;
-    let animTimer = 0;
-    let spriteLoaded = false;
-    spriteImg.onload = () => { spriteLoaded = true; };
+    // Individual sprite frames for player character (transparent background)
+    const spriteFiles = ['sprites/walk_1.webp', 'sprites/walk_2.webp', 'sprites/walk_3.webp', 'sprites/walk_4.webp'];
+    const sprites = [];
+    let spritesLoaded = 0;
+    const TOTAL_SPRITES = spriteFiles.length;
+    for (let i = 0; i < TOTAL_SPRITES; i++) {
+        const img = new Image();
+        img.onload = () => { spritesLoaded++; };
+        img.src = spriteFiles[i];
+        sprites.push(img);
+    }
+    const spriteLoaded = () => spritesLoaded >= TOTAL_SPRITES;
 
     const TILE = 40;
     // Legend: #=wall .=floor D=door(closed) d=door(open) P=pillar C=column B=barrel T=table S=skeleton ~=bloodstain
@@ -595,14 +575,17 @@
         ctx.fillStyle='rgba(0,0,0,0.35)';
         ctx.beginPath();ctx.ellipse(sx,sy+player.radius+4,player.radius*0.9,4,0,0,Math.PI*2);ctx.fill();
 
-        if(spriteLoaded) {
-            const anim=ANIMS[currentAnim]||ANIMS.idle_down;
-            const col=(anim.colOffset||0)+animFrame;
-            const srcX=col*SPRITE_W;
-            const srcY=anim.row*ROW_H+LABEL_H;
-            // Draw the sprite frame centered on player position - moderate size
-            const drawSize=56;
-            ctx.drawImage(spriteImg,srcX,srcY,SPRITE_W,SPRITE_H,sx-drawSize/2,sy-drawSize/2,drawSize,drawSize);
+        if(spriteLoaded()) {
+            // Use walk cycle sprites - moderate size (not too big, not too small)
+            const drawSize=48;
+            const frameIndex = animFrame % 4;
+            const sprite = sprites[frameIndex];
+            if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+                // Draw with transparent background, centered on player
+                const aspectRatio = sprite.naturalHeight / sprite.naturalWidth;
+                const drawH = drawSize * aspectRatio;
+                ctx.drawImage(sprite, sx - drawSize/2, sy - drawH/2, drawSize, drawH);
+            }
         } else {
             // Fallback circle
             ctx.fillStyle='#3498db';ctx.beginPath();ctx.arc(sx,sy,player.radius,0,Math.PI*2);ctx.fill();
