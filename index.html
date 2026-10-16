@@ -600,8 +600,8 @@
             const col=(anim.colOffset||0)+animFrame;
             const srcX=col*SPRITE_W;
             const srcY=anim.row*ROW_H+LABEL_H;
-            // Draw the sprite frame centered on player position
-            const drawSize=48;
+            // Draw the sprite frame centered on player position - moderate size
+            const drawSize=56;
             ctx.drawImage(spriteImg,srcX,srcY,SPRITE_W,SPRITE_H,sx-drawSize/2,sy-drawSize/2,drawSize,drawSize);
         } else {
             // Fallback circle
