@@ -138,19 +138,20 @@
     spriteImg.onload = () => { spriteLoaded = true; };
 
     const TILE = 40;
-    const MAP = [
+    // Legend: #=wall .=floor D=door(closed) d=door(open) P=pillar C=column B=barrel T=table S=skeleton ~=bloodstain
+    const MAP_TEMPLATE = [
         "#######################################################",
         "#........#...........#.......#...........#.........#",
         "#........#...........#.......#...........#.........#",
         "#..P.....#.....P.....#...P...#.....P.....#....P....#",
         "#........#...........#.......#...........#.........#",
-        "#........#...........#.......#...........#.........#",
+        "#........D...........D.......D...........D.........#",
         "###..#####...#######..#####...#######..#####...###..#",
         "#........#...........#.......#...........#.........#",
         "#........#...........#.......#...........#.........#",
         "#..C.....#.....C.....#...C...#.....C.....#....C....#",
         "#........#...........#.......#...........#.........#",
-        "#........#...........#.......#...........#.........#",
+        "#........D...........D.......D...........D.........#",
         "###..#####...#######..#####...#######..#####...###..#",
         "#........#...........#.......#...........#.........#",
         "#........#...........#...........#.......#...........#.........#",
@@ -159,6 +160,17 @@
         "#........#...........#.......#...........#.........#",
         "#######################################################",
     ];
+    // Mutable map (doors can open)
+    const MAP = MAP_TEMPLATE.map(row => row.split(''));
+    // Track door states: key = "tx,ty", value = { open: bool, anim: 0-1 }
+    const doors = {};
+    for (let ty = 0; ty < MAP.length; ty++) {
+        for (let tx = 0; tx < MAP[0].length; tx++) {
+            if (MAP[ty][tx] === 'D') {
+                doors[tx + ',' + ty] = { open: false, anim: 0 };
+            }
+        }
+    }
     const MW = MAP[0].length * TILE;
     const MH = MAP.length * TILE;
 
@@ -168,8 +180,8 @@
         [1,15, 7, 6, 'mossy'],    [9,15, 11, 6, 'cobble'],  [21,15, 7, 6, 'stone'],   [29,15, 11, 6, 'mossy'],   [41,15, 7, 6, 'cobble'],  [49,15, 7, 6, 'stone'],
     ];
 
-    function isWall(x, y) { const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE); if(tx<0||tx>=MAP[0].length||ty<0||ty>=MAP.length) return true; return MAP[ty][tx]==='#'; }
-    function isWallTile(tx, ty) { if(tx<0||tx>=MAP[0].length||ty<0||ty>=MAP.length) return true; return MAP[ty][tx]==='#'; }
+    function isWall(x, y) { const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE); if(tx<0||tx>=MAP[0].length||ty<0||ty>=MAP.length) return true; const ch=MAP[ty][tx]; if(ch==='#') return true; if(ch==='D') { const d=doors[tx+','+ty]; return d&&!d.open; } return false; }
+    function isWallTile(tx, ty) { if(tx<0||tx>=MAP[0].length||ty<0||ty>=MAP.length) return true; const ch=MAP[ty][tx]; if(ch==='#') return true; if(ch==='D') { const d=doors[tx+','+ty]; return d&&!d.open; } return false; }
     function roomColor(tx, ty) { for(const [rx,ry,rw,rh,c] of ROOMS) if(tx>=rx&&tx<rx+rw&&ty>=ry&&ty<ry+rh) return c; return 'stone'; }
 
     let audioCtx = null;
@@ -356,6 +368,18 @@
             } else { player.shootCooldown=300; playSound('empty'); }
         }
 
+        // Open nearby doors
+        for (const key in doors) {
+            const [dx, dy] = key.split(',').map(Number);
+            const doorX = dx * TILE + TILE/2, doorY = dy * TILE + TILE/2;
+            const dist = distance(player.x, player.y, doorX, doorY);
+            if (dist < 60 && !doors[key].open) {
+                doors[key].open = true;
+                MAP[dy][dx] = 'd';
+                playSound('pickup');
+                createParticles(doorX, doorY, '#8B4513', 8, 3, 20);
+            }
+        }
         if(keys['e']) { for(let i=items.length-1;i>=0;i--) { if(distance(player.x,player.y,items[i].x,items[i].y)<player.radius+items[i].radius+5){collectItem(items[i]);items.splice(i,1);} } }
     }
 
@@ -519,7 +543,24 @@
         for(let y=sy;y<ey;y+=TILE) for(let x=sx;x<ex;x+=TILE) {
             const tx=Math.floor(x/TILE),ty=Math.floor(y/TILE);
             if(tx<0||tx>=MAP[0].length||ty<0||ty>=MAP.length)continue;
-            if(MAP[ty][tx]==='#') {
+            const tileCh=MAP[ty][tx];
+            if(tileCh==='D'||tileCh==='d') {
+                const door=doors[tx+','+ty];
+                const doorOpen=door?door.open:true;
+                const sx2=x-camera.x,sy2=y-camera.y;
+                ctx.fillStyle='#3a2a1a';ctx.fillRect(sx2,sy2,TILE,TILE);
+                if(!doorOpen) {
+                    ctx.fillStyle='#6b4423';ctx.fillRect(sx2+4,sy2+2,TILE-8,TILE-4);
+                    ctx.strokeStyle='#4a2e15';ctx.lineWidth=1;
+                    for(let p=0;p<4;p++){ctx.beginPath();ctx.moveTo(sx2+8+p*8,sy2+4);ctx.lineTo(sx2+8+p*8,sy2+TILE-4);ctx.stroke();}
+                    ctx.fillStyle='#c0a060';ctx.beginPath();ctx.arc(sx2+TILE-10,sy2+TILE/2,3,0,Math.PI*2);ctx.fill();
+                    ctx.fillStyle='#8a6a30';ctx.fillRect(sx2+TILE-14,sy2+TILE/2-4,8,8);
+                } else {
+                    ctx.fillStyle='#1a1a2e';ctx.fillRect(sx2+4,sy2+2,TILE-8,TILE-4);
+                    ctx.fillStyle='#4a2e15';ctx.fillRect(sx2+2,sy2+2,6,TILE-4);
+                }
+            }
+            else if(tileCh==='#') {
                 const sx2=x-camera.x,sy2=y-camera.y;
                 ctx.fillStyle='#1a1a2e';ctx.fillRect(sx2,sy2,TILE,TILE);
                 ctx.fillStyle='#22223a';ctx.fillRect(sx2,sy2,TILE,3);
@@ -636,8 +677,8 @@
 
     function drawLighting() {
         const px=player.x-camera.x,py=player.y-camera.y;
-        const g=ctx.createRadialGradient(px,py,50,px,py,300);
-        g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(0.5,'rgba(0,0,0,0.3)');g.addColorStop(1,'rgba(0,0,0,0.85)');
+        const g=ctx.createRadialGradient(px,py,80,px,py,450);
+        g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(0.5,'rgba(0,0,0,0.2)');g.addColorStop(1,'rgba(0,0,0,0.6)');
         ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
     }
 
@@ -657,7 +698,7 @@
         const scale=Math.min(minimapCanvas.width/MW,minimapCanvas.height/MH);
         const ox=(minimapCanvas.width-MW*scale)/2,oy=(minimapCanvas.height-MH*scale)/2;
         minimapCtx.clearRect(0,0,minimapCanvas.width,minimapCanvas.height);
-        for(let y=0;y<MAP.length;y++)for(let x=0;x<MAP[0].length;x++){minimapCtx.fillStyle=MAP[y][x]==='#'?'#333':'#111';minimapCtx.fillRect(ox+x*TILE*scale,oy+y*TILE*scale,TILE*scale,TILE*scale);}
+        for(let y=0;y<MAP.length;y++)for(let x=0;x<MAP[0].length;x++){const mc=MAP[y][x];minimapCtx.fillStyle=mc==='#'?'#333':(mc==='D'?'#8B4513':(mc==='d'?'#4a3520':'#111'));minimapCtx.fillRect(ox+x*TILE*scale,oy+y*TILE*scale,TILE*scale,TILE*scale);}
         minimapCtx.fillStyle='#ff0000';
         for(const z of zombies){minimapCtx.beginPath();minimapCtx.arc(ox+z.x*scale,oy+z.y*scale,2,0,Math.PI*2);minimapCtx.fill();}
         minimapCtx.fillStyle='#ffff00';
